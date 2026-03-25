@@ -21,8 +21,11 @@ const (
 	G          = 6.674e-11
 	M          = 5.972e24
 	R          = 6.371e6
+	m          = 100
+	r          = 4
+	Cw         = 0.47
 	dt         = 1
-	iterations = 200000
+	iterations = 2000000
 )
 
 func main() {
@@ -30,10 +33,10 @@ func main() {
 	log.Println("[INFO] Start simulatie")
 
 	t := 0.0
-	x := 5e7
+	x := 8e7
 	y := 0.0
 	vx := 0.0
-	vy := 10e2
+	vy := 8.63e2
 
 	orbitData := make(plotter.XYs, 0, iterations)
 	xData := make(plotter.XYs, 0, iterations)
@@ -46,13 +49,39 @@ out:
 		xData = append(xData, plotter.XY{X: t, Y: x})
 		yData = append(yData, plotter.XY{X: t, Y: y})
 
-		r := math.Sqrt(x*x + y*y)
-		if r < R {
+		d := math.Sqrt(x*x + y*y)
+		if d < R {
 			break out
 		}
 
-		ax := -G * M * x / (r * r * r)
-		ay := -G * M * y / (r * r * r)
+		agx := -G * M * x / (d * d * d)
+		agy := -G * M * y / (d * d * d)
+
+		h := d - R
+		if h <= 100000 {
+			log.Printf("Entered atmosphere")
+		}
+		rho := 0.0
+		if h < 0 {
+			rho = 1.225
+		} else if h < 20000 {
+			rho = 1.225 * math.Exp(-1.0e-4*h)
+		} else if h <= 60000 {
+			rho = 0.08803 * math.Exp(-1.4e-4*(h-20000))
+		} else if h <= 100000 {
+			rho = 3.1e-4 * math.Exp(-1.9e-4*(h-60000))
+		} else {
+			rho = 0.0
+		}
+
+		A := math.Pi * r * r
+		v := math.Hypot(vx, vy)
+
+		awx := -(0.5 * rho * Cw * A / m) * v * vx
+		awy := -(0.5 * rho * Cw * A / m) * v * vy
+
+		ax := agx + awx
+		ay := agy + awy
 
 		vx += ax * dt
 		vy += ay * dt
@@ -61,7 +90,7 @@ out:
 		t += dt
 
 		if i%1000 == 0 {
-			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e", i, t, x, y)
+			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e h=%.0f", i, t, x, y, h)
 		}
 	}
 
@@ -73,12 +102,8 @@ out:
 	pBaan.Add(plotter.NewGrid())
 	applyHugeStyle(pBaan)
 
-	lijnBaan, err := plotter.NewLine(orbitData)
+	err := addFadedOrbit(pBaan, orbitData, color.NRGBA{R: 220, G: 20, B: 60, A: 255})
 	must(err)
-	lijnBaan.Color = color.RGBA{R: 220, G: 20, B: 60, A: 255}
-	lijnBaan.Width = vg.Points(3.0)
-	pBaan.Add(lijnBaan)
-	pBaan.Legend.Add("Baan", lijnBaan)
 
 	earthCircle := makeEarthCircle(R, 720)
 	earthLine, err := plotter.NewLine(earthCircle)
@@ -275,4 +300,37 @@ func makeEarthCircle(radius float64, n int) plotter.XYs {
 		pts[i].Y = radius * math.Sin(theta)
 	}
 	return pts
+}
+
+func addFadedOrbit(p *plot.Plot, data plotter.XYs, base color.NRGBA) error {
+	const segments = 200
+	if len(data) < 2 {
+		return nil
+	}
+
+	step := len(data) / segments
+	if step < 2 {
+		step = 2
+	}
+
+	for i := 0; i < segments; i++ {
+		start := i * step
+		end := start + step + 1
+		if start >= len(data)-1 {
+			break
+		}
+		if end > len(data) {
+			end = len(data)
+		}
+
+		alpha := uint8(30 + (225*i)/(segments-1))
+		line, err := plotter.NewLine(data[start:end])
+		if err != nil {
+			return err
+		}
+		line.Color = color.NRGBA{R: base.R, G: base.G, B: base.B, A: alpha}
+		line.Width = vg.Points(3.0)
+		p.Add(line)
+	}
+	return nil
 }
