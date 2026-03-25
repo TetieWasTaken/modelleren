@@ -20,7 +20,8 @@ import (
 const (
 	G          = 6.674e-11
 	M          = 5.972e24
-	dt         = 1.00
+	R          = 6.371e6
+	dt         = 1
 	iterations = 200000
 )
 
@@ -29,14 +30,16 @@ func main() {
 	log.Println("[INFO] Start simulatie")
 
 	t := 0.0
-	x := 7e6
+	x := 5e7
 	y := 0.0
 	vx := 0.0
-	vy := 10.0e3
+	vy := 10e2
 
 	orbitData := make(plotter.XYs, 0, iterations)
 	xData := make(plotter.XYs, 0, iterations)
 	yData := make(plotter.XYs, 0, iterations)
+
+out:
 
 	for i := 0; i < iterations; i++ {
 		orbitData = append(orbitData, plotter.XY{X: x, Y: y})
@@ -44,6 +47,10 @@ func main() {
 		yData = append(yData, plotter.XY{X: t, Y: y})
 
 		r := math.Sqrt(x*x + y*y)
+		if r < R {
+			break out
+		}
+
 		ax := -G * M * x / (r * r * r)
 		ay := -G * M * y / (r * r * r)
 
@@ -73,13 +80,20 @@ func main() {
 	pBaan.Add(lijnBaan)
 	pBaan.Legend.Add("Baan", lijnBaan)
 
-	aarde, err := plotter.NewScatter(plotter.XYs{{X: 0, Y: 0}})
+	earthCircle := makeEarthCircle(R, 720)
+	earthLine, err := plotter.NewLine(earthCircle)
 	must(err)
-	aarde.Color = color.RGBA{R: 30, G: 144, B: 255, A: 255}
-	aarde.Shape = plotdraw.CircleGlyph{}
-	aarde.Radius = vg.Points(9)
-	pBaan.Add(aarde)
-	pBaan.Legend.Add("Middelpunt aarde", aarde)
+	earthLine.Color = color.RGBA{R: 30, G: 144, B: 255, A: 255}
+	earthLine.Width = vg.Points(2.5)
+	pBaan.Add(earthLine)
+	pBaan.Legend.Add("Aarde (R = 6.371e6 m)", earthLine)
+
+	center, err := plotter.NewScatter(plotter.XYs{{X: 0, Y: 0}})
+	must(err)
+	center.Color = color.RGBA{R: 0, G: 0, B: 120, A: 255}
+	center.Shape = plotdraw.CircleGlyph{}
+	center.Radius = vg.Points(4)
+	pBaan.Add(center)
 
 	lim := symmetricLimitAroundZero(orbitData, 1.05)
 	pBaan.X.Min, pBaan.X.Max = -lim, lim
@@ -248,4 +262,17 @@ func symmetricLimitAroundZero(data plotter.XYs, marginFactor float64) float64 {
 		maxAbs = 1
 	}
 	return maxAbs * marginFactor
+}
+
+func makeEarthCircle(radius float64, n int) plotter.XYs {
+	if n < 3 {
+		n = 3
+	}
+	pts := make(plotter.XYs, n+1)
+	for i := 0; i <= n; i++ {
+		theta := 2 * math.Pi * float64(i) / float64(n)
+		pts[i].X = radius * math.Cos(theta)
+		pts[i].Y = radius * math.Sin(theta)
+	}
+	return pts
 }
