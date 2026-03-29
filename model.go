@@ -25,15 +25,19 @@ const (
 	m          = 100
 	r          = 3
 	Cw         = 0.47
-	dt         = 0.01
-	iterations = 10000000
+	dt         = 0.0001
+	iterations = 1000000000
+	plotCount  = 20000
+	mu         = G * M
+	A          = math.Pi * r * r
+	drag       = 0.5 * Cw * A / m
 )
 
 func calculateAcceleration(x, y, vx, vy float64) (ax, ay float64) {
 	d := math.Sqrt(x*x + y*y)
 
-	agx := -G * M * x / (d * d * d)
-	agy := -G * M * y / (d * d * d)
+	agx := -mu * x / (d * d * d)
+	agy := -mu * y / (d * d * d)
 
 	h := d - R
 
@@ -48,11 +52,10 @@ func calculateAcceleration(x, y, vx, vy float64) (ax, ay float64) {
 		rho = 3.1e-4 * math.Exp(-1.9e-4*(h-60000))
 	}
 
-	A := math.Pi * r * r
-	v := math.Hypot(vx, vy)
+	v := math.Sqrt(vx*vx + vy*vy)
 
-	awx := -(0.5 * rho * Cw * A / m) * v * vx
-	awy := -(0.5 * rho * Cw * A / m) * v * vy
+	awx := -drag * rho * v * vx
+	awy := -drag * rho * v * vy
 
 	ax = agx + awx
 	ay = agy + awy
@@ -79,9 +82,11 @@ func main() {
 out:
 
 	for i := 0; i < iterations; i++ {
-		orbitData = append(orbitData, plotter.XY{X: x, Y: y})
-		xData = append(xData, plotter.XY{X: t, Y: x})
-		yData = append(yData, plotter.XY{X: t, Y: y})
+		if i%plotCount == 0 {
+			orbitData = append(orbitData, plotter.XY{X: x, Y: y})
+			xData = append(xData, plotter.XY{X: t, Y: x})
+			yData = append(yData, plotter.XY{X: t, Y: y})
+		}
 
 		d := math.Sqrt(x*x + y*y)
 		if d < R {
@@ -138,7 +143,7 @@ out:
 
 		t += dt
 
-		if i%1000 == 0 {
+		if i%1000000 == 0 {
 			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e d=%.0f", i, t, x, y, d)
 		}
 	}
@@ -354,7 +359,7 @@ func makeEarthCircle(radius float64, n int) plotter.XYs {
 }
 
 func addFadedOrbit(p *plot.Plot, data plotter.XYs, base color.NRGBA) error {
-	const segments = 200
+	const segments = 50
 	if len(data) < 2 {
 		return nil
 	}
