@@ -22,11 +22,42 @@ const (
 	M          = 5.972e24
 	R          = 6.371e6
 	m          = 100
-	r          = 4
+	r          = 3
 	Cw         = 0.47
-	dt         = 1
-	iterations = 2000000
+	dt         = 100.0
+	iterations = 200000
 )
+
+func calculateAcceleration(x, y, vx, vy float64) (ax, ay float64) {
+	d := math.Sqrt(x*x + y*y)
+
+	agx := -G * M * x / (d * d * d)
+	agy := -G * M * y / (d * d * d)
+
+	h := d - R
+
+	rho := 0.0
+	if h < 0 {
+		rho = 1.225
+	} else if h < 20000 {
+		rho = 1.225 * math.Exp(-1.0e-4*h)
+	} else if h <= 60000 {
+		rho = 0.08803 * math.Exp(-1.4e-4*(h-20000))
+	} else if h <= 100000 {
+		rho = 3.1e-4 * math.Exp(-1.9e-4*(h-60000))
+	}
+
+	A := math.Pi * r * r
+	v := math.Hypot(vx, vy)
+
+	awx := -(0.5 * rho * Cw * A / m) * v * vx
+	awy := -(0.5 * rho * Cw * A / m) * v * vy
+
+	ax = agx + awx
+	ay = agy + awy
+
+	return
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
@@ -36,7 +67,7 @@ func main() {
 	x := 8e7
 	y := 0.0
 	vx := 0.0
-	vy := 8.63e2
+	vy := 9e2
 
 	orbitData := make(plotter.XYs, 0, iterations)
 	xData := make(plotter.XYs, 0, iterations)
@@ -54,43 +85,58 @@ out:
 			break out
 		}
 
-		agx := -G * M * x / (d * d * d)
-		agy := -G * M * y / (d * d * d)
+		// k1
+		ax1, ay1 := calculateAcceleration(x, y, vx, vy)
+		kx1 := vx
+		ky1 := vy
+		kvx1 := ax1
+		kvy1 := ay1
 
-		h := d - R
-		if h <= 100000 {
-			log.Printf("Entered atmosphere")
-		}
-		rho := 0.0
-		if h < 0 {
-			rho = 1.225
-		} else if h < 20000 {
-			rho = 1.225 * math.Exp(-1.0e-4*h)
-		} else if h <= 60000 {
-			rho = 0.08803 * math.Exp(-1.4e-4*(h-20000))
-		} else if h <= 100000 {
-			rho = 3.1e-4 * math.Exp(-1.9e-4*(h-60000))
-		} else {
-			rho = 0.0
-		}
+		// k2
+		ax2, ay2 := calculateAcceleration(
+			x+0.5*dt*kx1,
+			y+0.5*dt*ky1,
+			vx+0.5*dt*kvx1,
+			vy+0.5*dt*kvy1,
+		)
+		kx2 := vx + 0.5*dt*kvx1
+		ky2 := vy + 0.5*dt*kvy1
+		kvx2 := ax2
+		kvy2 := ay2
 
-		A := math.Pi * r * r
-		v := math.Hypot(vx, vy)
+		// k3
+		ax3, ay3 := calculateAcceleration(
+			x+0.5*dt*kx2,
+			y+0.5*dt*ky2,
+			vx+0.5*dt*kvx2,
+			vy+0.5*dt*kvy2,
+		)
+		kx3 := vx + 0.5*dt*kvx2
+		ky3 := vy + 0.5*dt*kvy2
+		kvx3 := ax3
+		kvy3 := ay3
 
-		awx := -(0.5 * rho * Cw * A / m) * v * vx
-		awy := -(0.5 * rho * Cw * A / m) * v * vy
+		// k4
+		ax4, ay4 := calculateAcceleration(
+			x+dt*kx3,
+			y+dt*ky3,
+			vx+dt*kvx3,
+			vy+dt*kvy3,
+		)
+		kx4 := vx + dt*kvx3
+		ky4 := vy + dt*kvy3
+		kvx4 := ax4
+		kvy4 := ay4
 
-		ax := agx + awx
-		ay := agy + awy
+		x += dt / 6.0 * (kx1 + 2*kx2 + 2*kx3 + kx4)
+		y += dt / 6.0 * (ky1 + 2*ky2 + 2*ky3 + ky4)
+		vx += dt / 6.0 * (kvx1 + 2*kvx2 + 2*kvx3 + kvx4)
+		vy += dt / 6.0 * (kvy1 + 2*kvy2 + 2*kvy3 + kvy4)
 
-		vx += ax * dt
-		vy += ay * dt
-		x += vx * dt
-		y += vy * dt
 		t += dt
 
 		if i%1000 == 0 {
-			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e h=%.0f", i, t, x, y, h)
+			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e d=%.0f", i, t, x, y, d)
 		}
 	}
 
