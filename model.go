@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/font"
@@ -24,8 +25,8 @@ const (
 	m          = 100
 	r          = 3
 	Cw         = 0.47
-	dt         = 100.0
-	iterations = 200000
+	dt         = 0.01
+	iterations = 10000000
 )
 
 func calculateAcceleration(x, y, vx, vy float64) (ax, ay float64) {
@@ -72,6 +73,8 @@ func main() {
 	orbitData := make(plotter.XYs, 0, iterations)
 	xData := make(plotter.XYs, 0, iterations)
 	yData := make(plotter.XYs, 0, iterations)
+
+	start := time.Now()
 
 out:
 
@@ -139,6 +142,8 @@ out:
 			log.Printf("[DEBUG] i=%d t=%.0f x=%.3e y=%.3e d=%.0f", i, t, x, y, d)
 		}
 	}
+
+	fmt.Printf("Operation took %dms\n", time.Now().Sub(start).Milliseconds())
 
 	// baan
 	pBaan := plot.New()
